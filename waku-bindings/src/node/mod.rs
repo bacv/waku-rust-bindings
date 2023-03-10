@@ -17,7 +17,6 @@ use std::marker::PhantomData;
 use std::sync::Mutex;
 use std::time::Duration;
 // crates
-use url::{Host, Url};
 // internal
 
 use crate::general::{
@@ -26,9 +25,10 @@ use crate::general::{
 };
 
 pub use config::{WakuLogLevel, WakuNodeConfig};
+pub use discovery::{waku_dns_discovery, DnsInfo};
 pub use peers::{Protocol, WakuPeerData, WakuPeers};
 pub use relay::{waku_create_content_topic, waku_create_pubsub_topic, waku_dafault_pubsub_topic};
-pub use store::waku_store_query;
+pub use store::{waku_local_store_query, waku_store_query};
 
 /// Shared flag to check if a waku node is already running in the current process
 static WAKU_NODE_INITIALIZED: Mutex<bool> = Mutex::new(false);
@@ -126,7 +126,7 @@ impl WakuNodeHandle<Running> {
     /// The peer must be already known.
     /// It must have been added before with [`WakuNodeHandle::add_peer`] or previously dialed with [`WakuNodeHandle::connect_peer_with_address`]
     /// As per the [specification](https://rfc.vac.dev/spec/36/#extern-char-waku_connect_peeridchar-peerid-int-timeoutms)
-    pub fn connect_peer_with_id(&self, peer_id: PeerId, timeout: Option<Duration>) -> Result<()> {
+    pub fn connect_peer_with_id(&self, peer_id: &PeerId, timeout: Option<Duration>) -> Result<()> {
         peers::waku_connect_peer_with_id(peer_id, timeout)
     }
 
@@ -225,6 +225,14 @@ impl WakuNodeHandle<Running> {
         store::waku_store_query(query, peer_id, timeout)
     }
 
+    /// Retrieves locally stored historical messages on specific content topics. This method may be called with [`PagingOptions`](`crate::general::PagingOptions`),
+    /// to retrieve historical messages on a per-page basis. If the request included [`PagingOptions`](`crate::general::PagingOptions`),
+    /// the node must return messages on a per-page basis and include [`PagingOptions`](`crate::general::PagingOptions`) in the response.
+    /// These [`PagingOptions`](`crate::general::PagingOptions`) must contain a cursor pointing to the Index from which a new page can be requested
+    pub fn local_store_query(&self, query: &StoreQuery) -> Result<StoreResponse> {
+        store::waku_local_store_query(query)
+    }
+
     /// Publish a message using Waku Lightpush
     /// As per the [specification](https://rfc.vac.dev/spec/36/#extern-char-waku_lightpush_publishchar-messagejson-char-topic-char-peerid-int-timeoutms)
     pub fn lightpush_publish(
@@ -298,15 +306,6 @@ impl WakuNodeHandle<Running> {
         timeout: Duration,
     ) -> Result<()> {
         filter::waku_filter_unsubscribe(filter_subscription, timeout)
-    }
-
-    pub fn dns_discovery(
-        &self,
-        url: &Url,
-        nameserver: Option<&Host>,
-        timeout: Option<Duration>,
-    ) -> Result<Vec<Multiaddr>> {
-        discovery::waku_dns_discovery(url, nameserver, timeout)
     }
 }
 

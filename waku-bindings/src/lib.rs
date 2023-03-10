@@ -5,11 +5,13 @@ mod decrypt;
 mod events;
 mod general;
 mod node;
+mod utils;
 
 pub use node::{
-    waku_create_content_topic, waku_create_pubsub_topic, waku_dafault_pubsub_topic, waku_new,
-    waku_store_query, Aes256Gcm, Initialized, Key, Multiaddr, Protocol, PublicKey, Running,
-    SecretKey, WakuLogLevel, WakuNodeConfig, WakuNodeHandle, WakuPeerData, WakuPeers,
+    waku_create_content_topic, waku_create_pubsub_topic, waku_dafault_pubsub_topic,
+    waku_dns_discovery, waku_new, Aes256Gcm, DnsInfo, Initialized, Key, Multiaddr, Protocol,
+    PublicKey, Running, SecretKey, WakuLogLevel, WakuNodeConfig, WakuNodeHandle, WakuPeerData,
+    WakuPeers,
 };
 
 pub use general::{

@@ -1,12 +1,24 @@
 // std
-use std::ffi::{CStr, CString};
+use std::ffi::CString;
 use std::time::Duration;
 // crates
+use enr::Enr;
 use multiaddr::Multiaddr;
+use serde::Deserialize;
 use url::{Host, Url};
 // internal
-use crate::general::JsonResponse;
-use crate::Result;
+use crate::utils::decode_and_free_response;
+use crate::{PeerId, Result};
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct DnsInfo {
+    #[serde(alias = "peerID")]
+    pub peer_id: PeerId,
+    #[serde(default, alias = "multiaddrs")]
+    pub addresses: Vec<Multiaddr>,
+    pub enr: Option<Enr<enr::secp256k1::SecretKey>>,
+}
 
 /// RetrieveNodes returns a list of multiaddress given a url to a DNS discoverable ENR tree.
 /// The nameserver can optionally be specified to resolve the enrtree url. Otherwise uses the default system dns.
@@ -14,19 +26,21 @@ pub fn waku_dns_discovery(
     url: &Url,
     server: Option<&Host>,
     timeout: Option<Duration>,
-) -> Result<Vec<Multiaddr>> {
-    let result = unsafe {
-        CStr::from_ptr(waku_sys::waku_dns_discovery(
-            CString::new(url.to_string())
-                .expect("CString should build properly from a valid Url")
-                .into_raw(),
-            CString::new(
-                server
-                    .map(|host| host.to_string())
-                    .unwrap_or_else(|| "".to_string()),
-            )
-            .expect("CString should build properly from a String nameserver")
-            .into_raw(),
+) -> Result<Vec<DnsInfo>> {
+    let url = CString::new(url.to_string())
+        .expect("CString should build properly from a valid Url")
+        .into_raw();
+    let server = CString::new(
+        server
+            .map(|host| host.to_string())
+            .unwrap_or_else(|| "".to_string()),
+    )
+    .expect("CString should build properly from a String nameserver")
+    .into_raw();
+    let result_ptr = unsafe {
+        let res = waku_sys::waku_dns_discovery(
+            url,
+            server,
             timeout
                 .map(|timeout| {
                     timeout
@@ -35,13 +49,27 @@ pub fn waku_dns_discovery(
                         .expect("Duration as milliseconds should fit in a i32")
                 })
                 .unwrap_or(0),
-        ))
+        );
+        // Recover strings and drop them
+        drop(CString::from_raw(url));
+        drop(CString::from_raw(server));
+        res
+    };
+
+    decode_and_free_response(result_ptr)
+}
+
+#[cfg(test)]
+mod test {
+    use url::Url;
+
+    #[test]
+    fn test_dns_discovery() {
+        let enrtree: Url =
+            "enrtree://AOGECG2SPND25EEFMAJ5WF3KSGJNSGV356DSTL2YVLLZWIV6SAYBM@test.waku.nodes.status.im".parse().unwrap();
+        let result = super::waku_dns_discovery(&enrtree, None, None);
+        assert!(result.is_ok());
+        assert!(!result.as_ref().unwrap().is_empty());
+        println!("{result:?}");
     }
-    .to_str()
-    .expect("Response should always succeed to load to a &str");
-
-    let response: JsonResponse<Vec<Multiaddr>> =
-        serde_json::from_str(result).expect("JsonResponse should always succeed to deserialize");
-
-    response.into()
 }
